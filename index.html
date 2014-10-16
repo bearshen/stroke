@@ -1,0 +1,162 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+
+<html>
+<head>
+    <!--Prevents iPhone, iPad, and touch devices from scrolling or zooming when touched-->
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0" />
+
+    <!--CSS-->
+    <style type="text/css">
+        html, body {
+            width:  100%;
+            height: 100%;
+        }
+
+        #doodle {
+            position: absolute;
+            top: 40px;
+        }
+
+        #controls {
+            background-color: #AAAAAA;
+            position: absolute;
+            font-weight: bold;
+            font-size: smaller;
+            padding: 0px;
+            height: 40px;
+        }
+
+        select {
+            font-family: monospace;
+            font-size: medium;
+        }
+
+        * {
+            padding:0;
+            margin:0;
+        }
+    </style>
+
+    <!--Load vendor js-->
+    <script src="js/vendor/socket.io.js"></script>
+    <script src="js/vendor/jquery-1.11.0.min.js"></script>
+    <script src="js/vendor/jquery.simplecolorpicker/jquery.simplecolorpicker.js"></script>
+    <link rel="stylesheet" href="js/vendor/jquery.simplecolorpicker/jquery.simplecolorpicker.css">
+    <link rel="stylesheet" href="js/vendor/jquery.simplecolorpicker/jquery.simplecolorpicker-fontawesome.css">
+    <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/font-awesome/4.0.0/css/font-awesome.css">
+    <!--[if lt IE 9]>
+    <script src="js/vendor/excanvas.compiled.js"></script>
+    <![endif]-->
+
+
+    <!--Load custom js-->
+    <script src="js/drawpad.js"></script>
+    <script>
+        var dw;
+        var dh;
+
+        $(document).ready(function() {
+
+            var oImage = new Image();
+            oImage.onload = function(){
+                dw = this.width;
+                dh = this.height;
+                $('#controls').width(dw);
+                $("#controls")[0].style['width'] = dw;
+                $('#doodle').width(dw);
+                $("#doodle")[0].style['width'] = dw;
+                $("#doodle")[0].style['height'] = dh;
+                $("#doodle").attr('width', dw.toString());
+                $("#doodle").attr('height', dh.toString());
+                $('select[name="color"]').simplecolorpicker({theme: 'fontawesome'});
+                var dp = new DrawPad($('#doodle')[0], {currentPenColor: $('#color option:selected').val(), currentDotSize: parseFloat($('#thickness option:selected').val())});
+                console.log(dp);
+
+                $('#color').change( function() {
+                    dp.onChangePenColor( $('#color option:selected').val() );
+                });
+                $('#thickness').change( function() {
+                    dp.onChangeDotSize( parseFloat($('#thickness option:selected').val()));
+                });
+                $('#save').click( function() {
+                    var dt = $("#doodle")[0].toDataURL('image/jpeg');
+                    console.log(dt);
+                    this.href = dt;
+                });
+                var socket = io.connect('http://stupidbear.me:8080/');
+                $('#undo').click( function() {
+                    socket.emit('undo'); // fullflush follows.
+                });
+
+                socket.on('fullflush', function(data) {
+                    dp.clear();
+                    dp.onRedrawStrokes(data);
+                });
+                socket.on('newstroke', function(data) {
+                    tmp = dp.onReceiveData(data);
+                    console.log(tmp);
+                    var points = dp.expandPoint(tmp.pts);
+                    dp.onRedrawStroke(points, tmp.color, tmp.dotsize);
+                    if (!data) {
+                        socket.emit('newstrokeconfirm', 0);
+                    } else {
+                        d = new Date();
+                        socket.emit('newstrokeconfirm', d.getTime());
+                    }
+                }) ;
+
+                dp.onEnd = function() {
+                    console.log(JSON.stringify(dp.stroke));
+                    socket.emit('strokeupdate', JSON.stringify(dp.stroke));
+                    socket.on('strokeupdateconfirm', function(data) {
+                        console.log(data);
+                    })
+                }
+
+            }
+            oImage.src = 'img/0.jpg';
+        });
+    </script>
+
+</head>
+
+<body>
+<!--Drop down menus for selecting line thickness and color-->
+<div id="controls">
+    Size:
+    <select id="thickness" class="fixed">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="15">15</option>
+        <option value="20">20</option>
+    </select>
+
+    Color:
+    <select id="color" name="color">
+        <option value="#7bd148">Green</option>
+        <option value="#5484ed">Bold blue</option>
+        <option value="#a4bdfc">Blue</option>
+        <option value="#46d6db">Turquoise</option>
+        <option value="#7ae7bf">Light green</option>
+        <option value="#51b749">Bold green</option>
+        <option value="#fbd75b">Yellow</option>
+        <option value="#ffb878">Orange</option>
+        <option value="#ff887c">Red</option>
+        <option value="#dc2127">Bold red</option>
+        <option value="#dbadff">Purple</option>
+        <option value="#e1e1e1">Gray</option>
+    </select>
+
+    <button id='save'>Save</button>
+    <button id='undo'>Undo</button>
+</div>
+
+<!--The canvas where drawings will be displayed-->
+<canvas id="doodle" style="background: url(img/0.jpg) no-repeat center center;"></canvas>
+
+</body>
+</html>
